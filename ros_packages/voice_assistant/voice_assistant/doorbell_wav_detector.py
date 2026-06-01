@@ -4,7 +4,7 @@ import audioop
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from datatypes.msg import VoiceEvent
 
 
 class DoorbellWavDetector(Node):
@@ -17,7 +17,7 @@ class DoorbellWavDetector(Node):
         self.wav_path = self.get_parameter("wav_path").value
         self.threshold = self.get_parameter("threshold").value
 
-        self.publisher = self.create_publisher(String, "/voice/events", 10)
+        self.publisher = self.create_publisher(VoiceEvent, "/voice/events", 10)
 
         self.timer = self.create_timer(1.0, self.analyze_wav_once)
         self.has_run = False
@@ -47,17 +47,21 @@ class DoorbellWavDetector(Node):
         self.get_logger().info(f"[WavDetector] WAV RMS volume: {rms}")
 
         if rms >= self.threshold:
-            event = {
-                "event_type": "doorbell_detected",
-                "confidence": 0.90,
-                "source": "wav_threshold_detector",
+
+            msg = VoiceEvent()
+            msg.event_type = "doorbell_detected"
+            msg.confidence = 0.90
+            msg.source = "wav_threshold_detector"
+            msg.metadata_json = json.dumps({
                 "rms": rms,
                 "threshold": self.threshold,
                 "wav_path": self.wav_path,
-            }
+            })
 
-            self.publisher.publish(String(data=json.dumps(event)))
-            self.get_logger().info(f"[WavDetector] Published event: {event}")
+            self.publisher.publish(msg)
+
+            self.get_logger().info(
+                f"[WavDetector] Published VoiceEvent: {msg.event_type}")
         else:
             self.get_logger().info("[WavDetector] No doorbell detected.")
 

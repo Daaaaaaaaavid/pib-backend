@@ -1,41 +1,34 @@
 import json
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
-
+from datatypes.msg import VoiceEvent, VoiceTask
 
 class VoiceRuleEngine(Node):
     def __init__(self):
         super().__init__("voice_rule_engine")
 
         self.subscription = self.create_subscription(
-            String,
+            VoiceEvent,
             "/voice/events",
             self.handle_event,
             10,
         )
 
-        self.publisher = self.create_publisher(String, "/voice/tasks", 10)
+        self.publisher = self.create_publisher(VoiceTask, "/voice/tasks", 10)
 
         self.get_logger().info("[RuleEngine] Ready. Waiting for voice events.")
 
-    def handle_event(self, msg: String):
-        try:
-            event = json.loads(msg.data)
-        except json.JSONDecodeError:
-            self.get_logger().error("[RuleEngine] Invalid event JSON")
-            return
-
-        event_type = event.get("event_type")
+    def handle_event(self, event: VoiceEvent):
+        event_type = event.event_type
 
         if event_type == "doorbell_detected":
-            task = {
-                "task_type": "handle_doorbell",
-                "priority": "high",
-                "source_event": event,
-            }
+            task = VoiceTask()
+            task.task_type = "handle_doorbell"
+            task.priority = "high"
+            task.source_event_type = event.event_type
+            task.metadata_json = event.metadata_json
 
-            self.publisher.publish(String(data=json.dumps(task)))
+            self.publisher.publish(task)
             self.get_logger().info(f"[RuleEngine] Generated task: {task}")
         else:
             self.get_logger().warn(f"[RuleEngine] No rule for event_type: {event_type}")

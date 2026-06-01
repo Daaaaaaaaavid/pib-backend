@@ -1,7 +1,7 @@
 import json
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from datatypes.msg import VoiceTask
 
 
 class VoiceTaskDispatcher(Node):
@@ -9,7 +9,7 @@ class VoiceTaskDispatcher(Node):
         super().__init__("voice_task_dispatcher")
 
         self.subscription = self.create_subscription(
-            String,
+            VoiceTask,
             "/voice/tasks",
             self.handle_task,
             10,
@@ -17,19 +17,13 @@ class VoiceTaskDispatcher(Node):
 
         self.get_logger().info("[Dispatcher] Ready. Waiting for voice tasks.")
 
-    def handle_task(self, msg: String):
-        try:
-            task = json.loads(msg.data)
-        except json.JSONDecodeError:
-            self.get_logger().error("[Dispatcher] Invalid task JSON")
-            return
-
-        task_type = task.get("task_type")
-
+    def handle_task(self, task: VoiceTask):
         self.get_logger().info(
-            f"[Dispatcher] Submitted task to taskmanagement: {task_type}"
+            f"[Dispatcher] Submitted task to taskmanagement: {task.task_type}"
         )
-        self.get_logger().info(f"[Dispatcher] Full task payload: {task}")
+        self.get_logger().info(
+            f"[Dispatcher] priority={task.priority}, source_event={task.source_event_type}, metadata={task.metadata_json}"
+        )
 
 
 def main(args=None):

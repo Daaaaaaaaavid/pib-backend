@@ -1,0 +1,4 @@
+string event_type
+float32 confidence
+string source
+string metadata_json

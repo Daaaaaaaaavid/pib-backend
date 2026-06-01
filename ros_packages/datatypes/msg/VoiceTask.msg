@@ -1,0 +1,4 @@
+string task_type
+string priority
+string source_event_type
+string metadata_json
