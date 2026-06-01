@@ -10,9 +10,12 @@ setup(
     version="0.0.0",
     packages=find_packages(exclude=["test"]),
     data_files=[
-        ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
-        ("share/" + package_name, ["package.xml"]),
-        (os.path.join("share", package_name, "launch"), glob("launch/*.py")),
+        ("share/ament_index/resource_index/packages", ["resource/voice_assistant"]),
+        ("share/voice_assistant", ["package.xml"]),
+        (
+            os.path.join("share", "voice_assistant", "launch"),
+            glob("launch/*.py"),
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
@@ -28,6 +31,10 @@ setup(
             "audio_recorder = voice_assistant.audio_recorder:main",
             "audio_player = voice_assistant.audio_player:main",
             "token_service = voice_assistant.token_service:main",
+            "demo_doorbell_detector = voice_assistant.demo_doorbell_detector:main",
+            "voice_rule_engine = voice_assistant.voice_rule_engine:main",
+            "voice_task_dispatcher = voice_assistant.voice_task_dispatcher:main",
+            "doorbell_wav_detector = voice_assistant.doorbell_wav_detector:main",
         ],
     },
 )
