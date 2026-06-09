@@ -35,6 +35,7 @@ setup(
             "voice_rule_engine = voice_assistant.voice_rule_engine:main",
             "voice_task_dispatcher = voice_assistant.voice_task_dispatcher:main",
             "doorbell_wav_detector = voice_assistant.doorbell_wav_detector:main",
+            "doorbell_audio_stream_detector = voice_assistant.doorbell_audio_stream_detector:main",
         ],
     },
 )
