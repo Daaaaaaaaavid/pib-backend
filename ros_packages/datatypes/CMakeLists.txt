@@ -48,6 +48,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 	"srv/CreateOrUpdateChatMessage.srv"
 	"msg/VoiceEvent.msg"
   	"msg/VoiceTask.msg"
+	"action/Listen.action"
 	DEPENDENCIES trajectory_msgs
 )
 

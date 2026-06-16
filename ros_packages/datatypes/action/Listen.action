@@ -1,0 +1,19 @@
+# Goal
+
+uint8 MODE_DOORBELL=1
+uint8 MODE_SPEECH=2
+
+uint8 mode
+float32 timeout_sec
+
+---
+# Result
+
+bool detected
+float32 confidence
+string transcript
+
+---
+# Feedback
+
+string state
