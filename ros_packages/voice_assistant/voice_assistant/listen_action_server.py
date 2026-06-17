@@ -1,4 +1,11 @@
-import math
+//Startet einen ros2 Action Server
+//Nimmt ein Goal mit Mode für Speech oder Doorbell + timeout von einem Client entgegen
+    //für Doorbell: MODE_DOORBELL=1
+    //Speech ist noch nicht implementiert
+//Hört bis zum timeout entweder auf .wav file oder oder über pyAudio auf das Mikro
+//returned werden detected, confidence, transscript
+    //transscript ist im Fall einer Doorbell einfach leer
+
 import time
 import wave
 from dataclasses import dataclass
@@ -10,11 +17,15 @@ from datatypes.action import Listen
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.node import Node
 
+from voice_assistant.yamnet_doorbell_classifier import YamnetDoorbellClassifier
+
 
 @dataclass
 class DetectionState:
     detected: bool = False
     confidence: float = 0.0
+    top_class: str = ""
+    speech_score: float = 0.0
 
 
 class ListenActionServer(Node):
@@ -23,13 +34,28 @@ class ListenActionServer(Node):
 
         self.declare_parameter("action_name", "/audio/listen")
         self.declare_parameter("doorbell_threshold", 0.30)
+        self.declare_parameter("speech_max_threshold", 0.25)
         self.declare_parameter("timeout_sec", 5.0)
         self.declare_parameter("wav_path", "")
         self.declare_parameter("sample_rate", 16000)
-        self.declare_parameter("chunk_size", 2048)
+        self.declare_parameter("chunk_size", 16000)
 
         action_name = self.get_parameter("action_name").value
 
+        doorbell_threshold = float(self.get_parameter("doorbell_threshold").value)
+        speech_max_threshold = float(self.get_parameter("speech_max_threshold").value)
+
+        self.get_logger().info("[ListenAction] Loading YAMNet model...")
+
+        //lädt bei start das Modell einmal 
+        self.classifier = YamnetDoorbellClassifier(
+            doorbell_threshold=doorbell_threshold,
+            speech_max_threshold=speech_max_threshold,
+        )
+
+        self.get_logger().info("[ListenAction] YAMNet model loaded")
+
+        //ros registriert die Action
         self._server = ActionServer(
             self,
             Listen,
@@ -41,6 +67,7 @@ class ListenActionServer(Node):
 
         self.get_logger().info(f"[ListenAction] Ready on {action_name}")
 
+    //checkt ob das Goal angenommen werden darf/kann, aktuell nur doorbell mode
     def goal_callback(self, goal_request: Listen.Goal) -> GoalResponse:
         if goal_request.mode != Listen.Goal.MODE_DOORBELL:
             self.get_logger().warn(
@@ -50,18 +77,23 @@ class ListenActionServer(Node):
 
         return GoalResponse.ACCEPT
 
+    //erlaubt einem laufenden Auftrag abgebrochen zu werden
     def cancel_callback(self, _goal_handle) -> CancelResponse:
         return CancelResponse.ACCEPT
 
+
+    //führt den das Goal aus wenn es angenommen wurde
+    //entscheidet ob aus wav oder mikro gelesen wird
+    //und baut roos result
+    //published listening als feedback
     def execute_callback(self, goal_handle) -> Listen.Result:
-        threshold = float(self.get_parameter("doorbell_threshold").value)
         default_timeout = float(self.get_parameter("timeout_sec").value)
         timeout_sec = float(goal_handle.request.timeout_sec or default_timeout)
         wav_path = str(self.get_parameter("wav_path").value or "")
 
         self.get_logger().info(
-            f"[ListenAction] Listening for doorbell: "
-            f"timeout={timeout_sec:.1f}s threshold={threshold:.2f}"
+            f"[ListenAction] Listening for doorbell with YAMNet: "
+            f"timeout={timeout_sec:.1f}s"
         )
 
         self._publish_feedback(goal_handle, "listening")
@@ -71,14 +103,12 @@ class ListenActionServer(Node):
         if wav_path:
             state = self._detect_doorbell_from_wav(
                 wav_path,
-                threshold,
                 timeout_sec,
                 goal_handle,
                 started_at,
             )
         else:
             state = self._detect_doorbell_from_microphone(
-                threshold,
                 timeout_sec,
                 goal_handle,
                 started_at,
@@ -103,15 +133,18 @@ class ListenActionServer(Node):
 
         self.get_logger().info(
             f"[ListenAction] Finished: "
-            f"detected={result.detected} confidence={result.confidence:.3f}"
+            f"detected={result.detected} "
+            f"confidence={result.confidence:.3f} "
+            f"top_class={state.top_class} "
+            f"speech_score={state.speech_score:.3f}"
         )
 
         return result
 
+    //liest ein wav file ein
     def _detect_doorbell_from_wav(
         self,
         wav_path: str,
-        threshold: float,
         timeout_sec: float,
         goal_handle,
         started_at: float,
@@ -137,15 +170,33 @@ class ListenActionServer(Node):
                     if not raw:
                         return state
 
-                    confidence = self._confidence_from_pcm(
+                    waveform = self._pcm_to_float_mono(
                         raw,
                         sample_width,
                         channels,
                     )
 
-                    state.confidence = max(state.confidence, confidence)
+                    if waveform.size == 0:
+                        continue
 
-                    if confidence >= threshold:
+                    classification = self.classifier.classify(waveform)
+
+                    doorbell_score = float(classification["doorbell_score"])
+                    speech_score = float(classification["speech_score"])
+                    top_class = str(classification["top_class"])
+
+                    state.confidence = max(state.confidence, doorbell_score)
+                    state.speech_score = speech_score
+                    state.top_class = top_class
+
+                    self.get_logger().info(
+                        f"[ListenAction] YAMNet: "
+                        f"doorbell_score={doorbell_score:.3f} "
+                        f"speech_score={speech_score:.3f} "
+                        f"top_class={top_class}"
+                    )
+
+                    if classification["detected"]:
                         state.detected = True
                         return state
 
@@ -155,9 +206,9 @@ class ListenActionServer(Node):
             self.get_logger().error(f"Could not analyse wav_path={wav_path}: {exc}")
             return state
 
+    //ließt audio vom mikro in einer Schleife über pyaudio ein ein 
     def _detect_doorbell_from_microphone(
         self,
-        threshold: float,
         timeout_sec: float,
         goal_handle,
         started_at: float,
@@ -194,15 +245,33 @@ class ListenActionServer(Node):
 
                 raw = stream.read(chunk_size, exception_on_overflow=False)
 
-                confidence = self._confidence_from_pcm(
+                waveform = self._pcm_to_float_mono(
                     raw,
                     sample_width=2,
                     channels=1,
                 )
 
-                state.confidence = max(state.confidence, confidence)
+                if waveform.size == 0:
+                    continue
 
-                if confidence >= threshold:
+                classification = self.classifier.classify(waveform)
+
+                doorbell_score = float(classification["doorbell_score"])
+                speech_score = float(classification["speech_score"])
+                top_class = str(classification["top_class"])
+
+                state.confidence = max(state.confidence, doorbell_score)
+                state.speech_score = speech_score
+                state.top_class = top_class
+
+                self.get_logger().info(
+                    f"[ListenAction] YAMNet: "
+                    f"doorbell_score={doorbell_score:.3f} "
+                    f"speech_score={speech_score:.3f} "
+                    f"top_class={top_class}"
+                )
+
+                if classification["detected"]:
                     state.detected = True
                     return state
 
@@ -217,35 +286,30 @@ class ListenActionServer(Node):
 
             audio.terminate()
 
-    def _confidence_from_pcm(
+    //verwandel die Audiodaten in floatdaten damit sie von yamnet verarbeitet werden können
+    def _pcm_to_float_mono(
         self,
         raw: bytes,
         sample_width: int,
         channels: int,
-    ) -> float:
+    ) -> np.ndarray:
         if sample_width != 2:
             self.get_logger().warn(
-                "Only 16-bit PCM WAV is calibrated for doorbell detection"
+                "Only 16-bit PCM audio is supported for YAMNet detection"
             )
-            return 0.0
+            return np.array([], dtype=np.float32)
 
         samples = np.frombuffer(raw, dtype=np.int16)
 
         if samples.size == 0:
-            return 0.0
+            return np.array([], dtype=np.float32)
 
         if channels > 1:
             samples = samples.reshape(-1, channels).mean(axis=1)
 
-        normalized = samples.astype(np.float32) / 32768.0
+        return samples.astype(np.float32) / 32768.0
 
-        rms = math.sqrt(float(np.mean(np.square(normalized))))
-        peak = float(np.max(np.abs(normalized)))
-
-        confidence = 0.65 * rms + 0.35 * peak
-
-        return max(0.0, min(1.0, confidence))
-
+    //schickt feedback an den client
     def _publish_feedback(self, goal_handle, state: str) -> None:
         feedback = Listen.Feedback()
         feedback.state = state
