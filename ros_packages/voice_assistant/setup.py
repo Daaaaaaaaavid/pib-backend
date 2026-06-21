@@ -37,6 +37,7 @@ setup(
             "doorbell_wav_detector = voice_assistant.doorbell_wav_detector:main",
             "doorbell_audio_stream_detector = voice_assistant.doorbell_audio_stream_detector:main",
             "listen_action_server = voice_assistant.listen_action_server:main",
+            "doorbell_task_manager_demo = voice_assistant.doorbell_task_manager_demo:main",
         ],
     },
 )
