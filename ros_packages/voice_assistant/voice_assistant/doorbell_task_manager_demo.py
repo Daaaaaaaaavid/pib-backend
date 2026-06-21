@@ -9,6 +9,10 @@ class DoorbellTaskManagerDemo(Node):
     def __init__(self):
         super().__init__("doorbell_task_manager_demo")
 
+        GREEN = "\033[92m"
+        RED = "\033[91m"
+        RESET = "\033[0m"
+
         self.declare_parameter("action_name", "/audio/listen")
         self.declare_parameter("timeout_sec", 30.0)
         self.declare_parameter("repeat", True)
@@ -38,6 +42,7 @@ class DoorbellTaskManagerDemo(Node):
         goal.timeout_sec = self.timeout_sec
 
         self.get_logger().info("[TaskManagerDemo] Listening for doorbell...")
+
         future = self.client.send_goal_async(
             goal,
             feedback_callback=self.feedback_callback,
@@ -65,17 +70,15 @@ class DoorbellTaskManagerDemo(Node):
 
         if result.detected:
             self.get_logger().info(
-                f"[TaskManagerDemo] Doorbell detected "
-                f"(confidence={result.confidence:.3f})"
-            )
-            self.get_logger().info(
-                "[TaskManagerDemo] Simulated taskmanagement action: "
-                "create task handle_doorbell(priority=high)"
+                f"\033[1;92m"
+                f"✓ DOORBELL DETECTED (confidence={result.confidence:.3f})"
+                f"\033[0m"
             )
         else:
             self.get_logger().info(
-                f"[TaskManagerDemo] Timeout/no doorbell "
-                f"(confidence={result.confidence:.3f})"
+                f"\033[1;91m"
+                f"✗ NO DOORBELL DETECTED (confidence={result.confidence:.3f})"
+                f"\033[0m"
             )
 
         if self.repeat:
@@ -88,6 +91,11 @@ class DoorbellTaskManagerDemo(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = DoorbellTaskManagerDemo()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+
+    try:
+        rclpy.spin(node)
+    finally:
+        node.destroy_node()
+
+        if rclpy.ok():
+            rclpy.shutdown()

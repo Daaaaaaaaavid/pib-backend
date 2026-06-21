@@ -1,10 +1,10 @@
-//Startet einen ros2 Action Server
-//Nimmt ein Goal mit Mode für Speech oder Doorbell + timeout von einem Client entgegen
-    //für Doorbell: MODE_DOORBELL=1
-    //Speech ist noch nicht implementiert
-//Hört bis zum timeout entweder auf .wav file oder oder über pyAudio auf das Mikro
-//returned werden detected, confidence, transscript
-    //transscript ist im Fall einer Doorbell einfach leer
+# Startet einen ros2 Action Server
+# Nimmt ein Goal mit Mode für Speech oder Doorbell + timeout von einem Client entgegen
+#     für Doorbell: MODE_DOORBELL=1
+#     Speech ist noch nicht implementiert
+# Hört bis zum timeout entweder auf .wav file oder oder über pyAudio auf das Mikro
+# returned werden detected, confidence, transscript
+# transscript ist im Fall einer Doorbell einfach leer
 
 import time
 import wave
@@ -47,7 +47,7 @@ class ListenActionServer(Node):
 
         self.get_logger().info("[ListenAction] Loading YAMNet model...")
 
-        //lädt bei start das Modell einmal 
+        # lädt bei start das Modell einmal 
         self.classifier = YamnetDoorbellClassifier(
             doorbell_threshold=doorbell_threshold,
             speech_max_threshold=speech_max_threshold,
@@ -55,7 +55,7 @@ class ListenActionServer(Node):
 
         self.get_logger().info("[ListenAction] YAMNet model loaded")
 
-        //ros registriert die Action
+        # ros registriert die Action
         self._server = ActionServer(
             self,
             Listen,
@@ -67,7 +67,7 @@ class ListenActionServer(Node):
 
         self.get_logger().info(f"[ListenAction] Ready on {action_name}")
 
-    //checkt ob das Goal angenommen werden darf/kann, aktuell nur doorbell mode
+    # checkt ob das Goal angenommen werden darf/kann, aktuell nur doorbell mode
     def goal_callback(self, goal_request: Listen.Goal) -> GoalResponse:
         if goal_request.mode != Listen.Goal.MODE_DOORBELL:
             self.get_logger().warn(
@@ -77,15 +77,15 @@ class ListenActionServer(Node):
 
         return GoalResponse.ACCEPT
 
-    //erlaubt einem laufenden Auftrag abgebrochen zu werden
+    # erlaubt einem laufenden Auftrag abgebrochen zu werden
     def cancel_callback(self, _goal_handle) -> CancelResponse:
         return CancelResponse.ACCEPT
 
 
-    //führt den das Goal aus wenn es angenommen wurde
-    //entscheidet ob aus wav oder mikro gelesen wird
-    //und baut roos result
-    //published listening als feedback
+    # führt den das Goal aus wenn es angenommen wurde
+    # entscheidet ob aus wav oder mikro gelesen wird
+    # und baut roos result
+    # published listening als feedback
     def execute_callback(self, goal_handle) -> Listen.Result:
         default_timeout = float(self.get_parameter("timeout_sec").value)
         timeout_sec = float(goal_handle.request.timeout_sec or default_timeout)
@@ -141,7 +141,7 @@ class ListenActionServer(Node):
 
         return result
 
-    //liest ein wav file ein
+    # liest ein wav file ein
     def _detect_doorbell_from_wav(
         self,
         wav_path: str,
@@ -206,7 +206,7 @@ class ListenActionServer(Node):
             self.get_logger().error(f"Could not analyse wav_path={wav_path}: {exc}")
             return state
 
-    //ließt audio vom mikro in einer Schleife über pyaudio ein ein 
+    # ließt audio vom mikro in einer Schleife über pyaudio ein ein 
     def _detect_doorbell_from_microphone(
         self,
         timeout_sec: float,
@@ -286,7 +286,7 @@ class ListenActionServer(Node):
 
             audio.terminate()
 
-    //verwandel die Audiodaten in floatdaten damit sie von yamnet verarbeitet werden können
+    # verwandel die Audiodaten in floatdaten damit sie von yamnet verarbeitet werden können
     def _pcm_to_float_mono(
         self,
         raw: bytes,
@@ -309,7 +309,7 @@ class ListenActionServer(Node):
 
         return samples.astype(np.float32) / 32768.0
 
-    //schickt feedback an den client
+    # schickt feedback an den client
     def _publish_feedback(self, goal_handle, state: str) -> None:
         feedback = Listen.Feedback()
         feedback.state = state
